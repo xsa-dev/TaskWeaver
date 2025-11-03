@@ -15,13 +15,13 @@ class Post:
     A post is the message used to communicate between two roles.
     It should always have a text_message to denote the string message,
     while other data formats should be put in the attachment.
-    The role can be either a User, a Planner, or a CodeInterpreter.
+    The role can be either a User, a Planner, or others.
 
     Args:
         id: the unique id of the post.
         send_from: the role who sends the post.
         send_to: the role who receives the post.
-        text_message: the text message in the post.
+        message: the text message in the post.
         attachment_list: a list of attachments in the post.
 
     """
@@ -87,9 +87,9 @@ class Post:
         """Add an attachment to the post."""
         self.attachment_list.append(attachment)
 
-    def get_attachment(self, type: AttachmentType) -> List[Any]:
+    def get_attachment(self, type: AttachmentType) -> List[Attachment]:
         """Get all the attachments of the given type."""
-        return [attachment.content for attachment in self.attachment_list if attachment.type == type]
+        return [attachment for attachment in self.attachment_list if attachment.type == type]
 
     def del_attachment(self, type_list: List[AttachmentType]) -> None:
         """Delete all the attachments of the given type."""

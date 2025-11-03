@@ -1,4 +1,6 @@
 from typing import Literal
 
-RoleName = Literal["User", "Planner", "CodeInterpreter", "Unknown"]
+RoleName = str
 RoundState = Literal["finished", "failed", "created"]
+SharedMemoryEntryType = Literal["plan", "experience_sub_path", "example_sub_path"]
+SharedMemoryEntryScope = Literal["round", "conversation"]

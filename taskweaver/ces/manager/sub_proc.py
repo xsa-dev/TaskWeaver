@@ -3,8 +3,7 @@ from __future__ import annotations
 import os
 from typing import Dict, Optional
 
-from taskweaver.ces.common import Client, ExecutionResult, Manager
-from taskweaver.ces.environment import Environment
+from taskweaver.ces.common import Client, ExecutionResult, KernelModeType, Manager
 
 
 class SubProcessClient(Client):
@@ -57,19 +56,37 @@ class SubProcessManager(Manager):
         self,
         env_id: Optional[str] = None,
         env_dir: Optional[str] = None,
+        kernel_mode: KernelModeType = "local",
+        custom_image: Optional[str] = None,
     ) -> None:
+        from taskweaver.ces.environment import Environment, EnvMode
+
         env_id = env_id or os.getenv("TASKWEAVER_ENV_ID", "local")
         env_dir = env_dir or os.getenv(
             "TASKWEAVER_ENV_DIR",
             os.path.realpath(os.getcwd()),
         )
-        self.env = Environment(env_id, env_dir)
+        self.kernel_mode: KernelModeType = kernel_mode
+        if self.kernel_mode == "local":
+            env_mode = EnvMode.Local
+        elif self.kernel_mode == "container":
+            env_mode = EnvMode.Container
+        else:
+            raise ValueError(f"Invalid kernel mode: {self.kernel_mode}, expected 'local' or 'container'.")
+        self.env = Environment(
+            env_id,
+            env_dir,
+            env_mode=env_mode,
+            custom_image=custom_image,
+        )
 
     def initialize(self) -> None:
+        # no need to initialize the manager itself
         pass
 
     def clean_up(self) -> None:
-        self.env.clean_up()
+        # no need to clean up the manager itself
+        pass
 
     def get_session_client(
         self,
@@ -87,3 +104,6 @@ class SubProcessManager(Manager):
             session_dir=session_dir,
             cwd=cwd,
         )
+
+    def get_kernel_mode(self) -> KernelModeType:
+        return self.kernel_mode

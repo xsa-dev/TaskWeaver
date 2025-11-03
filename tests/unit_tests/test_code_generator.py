@@ -2,10 +2,10 @@ import os
 
 from injector import Injector
 
-from taskweaver.code_interpreter.code_generator.code_generator_plugin_only import _compose_prompt
 from taskweaver.config.config_mgt import AppConfigSource
 from taskweaver.logging import LoggingModule
 from taskweaver.memory.attachment import AttachmentType
+from taskweaver.memory.experience import Experience
 from taskweaver.memory.plugin import PluginModule
 
 
@@ -26,10 +26,11 @@ def test_compose_prompt():
     )
     app_injector.binder.bind(AppConfigSource, to=app_config)
 
-    from taskweaver.code_interpreter.code_generator import CodeGenerator
+    from taskweaver.code_interpreter.code_interpreter import CodeGenerator
     from taskweaver.memory import Attachment, Memory, Post, Round
 
     code_generator = app_injector.create_object(CodeGenerator)
+    code_generator.set_alias("CodeInterpreter")
 
     code1 = (
         "df = pd.DataFrame(np.random.rand(10, 2), columns=['DATE', 'VALUE'])\n"
@@ -60,7 +61,8 @@ def test_compose_prompt():
             "{ROLE_NAME} sees all required Python libs have been imported, so will not generate import codes.",
         ),
     )
-    post2.add_attachment(Attachment.create(AttachmentType.python, code1))
+    post2.add_attachment(Attachment.create(AttachmentType.reply_type, "python"))
+    post2.add_attachment(Attachment.create(AttachmentType.reply_content, code1))
     post2.add_attachment(Attachment.create(AttachmentType.execution_status, "SUCCESS"))
     post2.add_attachment(
         Attachment.create(
@@ -101,7 +103,13 @@ def test_compose_prompt():
     )
     post4.add_attachment(
         Attachment.create(
-            AttachmentType.python,
+            AttachmentType.reply_type,
+            "python",
+        ),
+    )
+    post4.add_attachment(
+        Attachment.create(
+            AttachmentType.reply_content,
             (
                 "min_value = df['VALUE'].min()\n"
                 "max_value = df['VALUE'].max()\n"
@@ -146,7 +154,7 @@ def test_compose_prompt():
     )
 
     assert messages[0]["role"] == "system"
-    assert messages[0]["content"].startswith("## On conversations:")
+    assert messages[0]["content"].startswith("## On current environment context:")
     assert messages[1]["role"] == "user"
     assert messages[1]["content"] == (
         "==============================\n"
@@ -161,36 +169,37 @@ def test_compose_prompt():
         "The functions can be directly called without importing:\n"
         "None\n"
         "-----------------------------\n"
-        "# Feedback of the code in the last round (None if no feedback):\n"
+        "### Feedback of the code in the last round (None if no feedback):\n"
         "None\n"
         "\n"
-        "# Request from the User in this round:\n"
-        "create a dataframe"
+        "### Request from the User in this round:\n"
+        "The task for this specific step is: create a dataframe"
     )
     assert messages[2]["role"] == "assistant"
     assert messages[2]["content"] == (
-        '{"response": [{"type": "thought", "content": "ProgramApe sees the user wants '
-        'generate a DataFrame."}, {"type": "thought", "content": "ProgramApe sees all '
-        "required Python libs have been imported, so will not generate import "
-        'codes."}, {"type": "python", "content": "df = pd.DataFrame(np.random.rand(10, '
-        "2), columns=['DATE', 'VALUE'])\\ndescriptions = "
-        '[(\\"sample_code_description\\", \\"Sample code has been generated to get a '
-        "dataframe `df` \\nwith 10 rows and 2 columns: 'DATE' and "
-        "'VALUE'\\\")]\"}]}"
+        '{"response": {"thought": "ProgramApe sees the user wants generate a '
+        "DataFrame.\\nProgramApe sees all required Python libs have been imported, so "
+        'will not generate import codes.", "reply_type": "python", "reply_content": '
+        "\"df = pd.DataFrame(np.random.rand(10, 2), columns=['DATE', "
+        '\'VALUE\'])\\ndescriptions = [(\\"sample_code_description\\", \\"Sample code '
+        "has been generated to get a dataframe `df` \\nwith 10 rows and 2 columns: "
+        "'DATE' and 'VALUE'\\\")]\"}}"
     )
 
     assert messages[5]["role"] == "user"
     assert messages[5]["content"] == (
         "-----------------------------\n"
-        "# Feedback of the code in the last round (None if no feedback):\n"
+        "### Feedback of the code in the last round (None if no feedback):\n"
         "## Execution\n"
         "Your code has been executed successfully with the following result:\n"
         "The minimum value in the 'VALUE' column is 0.05;The maximum value in the "
         "'VALUE' column is 0.99;The data range for the 'VALUE' column is 0.94\n"
         "\n"
         "\n"
-        "# Request from the User in this round:\n"
-        "what is the max value?\n"
+        "### Request from the User in this round:\n"
+        "The user request is: hello again\n"
+        "\n"
+        "The task for this specific step is: what is the max value?\n"
         "Please follow the instructions below to complete the task:\n"
         "- ProgramApe can refer to intermediate variables in the generated code from "
         "previous successful rounds and the context summary in the current "
@@ -200,6 +209,8 @@ def test_compose_prompt():
         "- ProgramApe put all the result variables in the last line of the code.\n"
         "- ProgramApe must not import the plugins and otherwise the code will be "
         "failed to execute.\n"
+        "- ProgramApe must try to directly import required modules without installing "
+        "them, and only install the modules if the execution fails. \n"
     )
 
 
@@ -224,10 +235,11 @@ def test_compose_prompt_with_plugin():
     )
     app_injector.binder.bind(AppConfigSource, to=app_config)
 
-    from taskweaver.code_interpreter.code_generator import CodeGenerator
+    from taskweaver.code_interpreter.code_interpreter import CodeGenerator
     from taskweaver.memory import Attachment, Memory, Post, Round
 
     code_generator = app_injector.create_object(CodeGenerator)
+    code_generator.set_alias("CodeInterpreter")
 
     code1 = (
         "df = pd.DataFrame(np.random.rand(10, 2), columns=['DATE', 'VALUE'])\n"
@@ -258,7 +270,9 @@ def test_compose_prompt_with_plugin():
             "{ROLE_NAME} sees all required Python libs have been imported, so will not generate import codes.",
         ),
     )
-    post2.add_attachment(Attachment.create(AttachmentType.python, code1))
+    post2.add_attachment(Attachment.create(AttachmentType.reply_type, "python"))
+    post2.add_attachment(Attachment.create(AttachmentType.reply_content, code1))
+
     post2.add_attachment(Attachment.create(AttachmentType.execution_status, "SUCCESS"))
     post2.add_attachment(
         Attachment.create(
@@ -307,10 +321,11 @@ def test_compose_prompt_with_plugin_only():
     )
     app_injector.binder.bind(AppConfigSource, to=app_config)
 
-    from taskweaver.code_interpreter.code_generator import CodeGeneratorPluginOnly
+    from taskweaver.code_interpreter.code_interpreter_plugin_only import CodeGeneratorPluginOnly
     from taskweaver.memory import Attachment, Memory, Post, Round
 
     code_generator = app_injector.get(CodeGeneratorPluginOnly)
+    code_generator.set_alias("CodeInterpreter")
 
     code1 = "r0 = klarna_search('iphone')\n" "r0"
     post1 = Post.create(
@@ -337,7 +352,8 @@ def test_compose_prompt_with_plugin_only():
             "{ROLE_NAME} can use the `klarna_search` function to find iphones on sale.",
         ),
     )
-    post2.add_attachment(Attachment.create(AttachmentType.python, code1))
+    post2.add_attachment(Attachment.create(AttachmentType.reply_type, "python"))
+    post2.add_attachment(Attachment.create(AttachmentType.reply_content, code1))
     post2.add_attachment(Attachment.create(AttachmentType.execution_status, "SUCCESS"))
     post2.add_attachment(
         Attachment.create(
@@ -353,14 +369,16 @@ def test_compose_prompt_with_plugin_only():
     memory = Memory(session_id="session-1")
     memory.conversation.add_round(round1)
 
-    messages, functions = _compose_prompt(
+    prompt_with_tools = code_generator._compose_prompt(
         system_instructions=code_generator.instruction_template.format(
             ROLE_NAME=code_generator.role_name,
         ),
         rounds=memory.conversation.rounds,
         plugin_pool=code_generator.plugin_pool,
     )
-
+    messages = prompt_with_tools["prompt"]
+    functions = prompt_with_tools["tools"]
+    assert functions
     assert len(functions) == 1
     assert functions[0]["function"]["name"] == "klarna_search"
     assert messages[1]["role"] == "user"
@@ -394,10 +412,11 @@ def test_compose_prompt_with_not_plugin_only():
     )
     app_injector.binder.bind(AppConfigSource, to=app_config)
 
-    from taskweaver.code_interpreter.code_generator import CodeGenerator
+    from taskweaver.code_interpreter.code_interpreter import CodeGenerator
     from taskweaver.memory import Attachment, Memory, Post, Round
 
     code_generator = app_injector.get(CodeGenerator)
+    code_generator.set_alias("CodeInterpreter")
 
     code1 = (
         "df = pd.DataFrame(np.random.rand(10, 2), columns=['DATE', 'VALUE'])\n"
@@ -428,7 +447,8 @@ def test_compose_prompt_with_not_plugin_only():
             "{ROLE_NAME} sees all required Python libs have been imported, so will not generate import codes.",
         ),
     )
-    post2.add_attachment(Attachment.create(AttachmentType.python, code1))
+    post2.add_attachment(Attachment.create(AttachmentType.reply_type, "python"))
+    post2.add_attachment(Attachment.create(AttachmentType.reply_content, code1))
     post2.add_attachment(Attachment.create(AttachmentType.execution_status, "SUCCESS"))
     post2.add_attachment(
         Attachment.create(
@@ -443,6 +463,8 @@ def test_compose_prompt_with_not_plugin_only():
 
     memory = Memory(session_id="session-1")
     memory.conversation.add_round(round1)
+
+    code_generator.role_load_example({"Planner", "CodeInterpreter"}, memory)
 
     messages = code_generator.compose_prompt(
         rounds=memory.conversation.rounds,
@@ -472,7 +494,7 @@ def test_code_correction_prompt():
     )
     app_injector.binder.bind(AppConfigSource, to=app_config)
 
-    from taskweaver.code_interpreter.code_generator import CodeGenerator
+    from taskweaver.code_interpreter.code_interpreter import CodeGenerator
     from taskweaver.memory import Attachment, Memory, Post, Round
 
     prompt_path = os.path.join(
@@ -480,6 +502,7 @@ def test_code_correction_prompt():
         "data/prompts/generator_prompt.yaml",
     )
     code_generator = app_injector.create_object(CodeGenerator)
+    code_generator.set_alias("CodeInterpreter")
 
     code1 = (
         "df = pd.DataFrame(np.random.rand(10, 2), columns=['DATE', 'VALUE'])\n"
@@ -510,7 +533,8 @@ def test_code_correction_prompt():
             "{ROLE_NAME} sees all required Python libs have been imported, so will not generate import codes.",
         ),
     )
-    post2.add_attachment(Attachment.create("python", code1))
+    post2.add_attachment(Attachment.create(AttachmentType.reply_type, "python"))
+    post2.add_attachment(Attachment.create(AttachmentType.reply_content, code1))
     post2.add_attachment(Attachment.create("execution_status", "FAILURE"))
     post2.add_attachment(
         Attachment.create(
@@ -538,13 +562,13 @@ def test_code_correction_prompt():
     assert messages[3]["role"] == "user"
     assert messages[3]["content"] == (
         "-----------------------------\n"
-        "# Feedback of the code in the last round (None if no feedback):\n"
+        "### Feedback of the code in the last round (None if no feedback):\n"
         "## Execution\n"
         "Your code has failed to execute with the following error:\n"
         "The code failed to execute. Please check the code and try again.\n"
         "\n"
         "\n"
-        "# Request from the User in this round:\n"
+        "### Request from the User in this round:\n"
         "Please check the code and try again.\n"
         "Please follow the instructions below to complete the task:\n"
         "- ProgramApe can refer to intermediate variables in the generated code from "
@@ -555,4 +579,107 @@ def test_code_correction_prompt():
         "- ProgramApe put all the result variables in the last line of the code.\n"
         "- ProgramApe must not import the plugins and otherwise the code will be "
         "failed to execute.\n"
+        "- ProgramApe must try to directly import required modules without installing "
+        "them, and only install the modules if the execution fails. \n"
+    )
+
+
+def test_compose_with_shared_plan():
+    app_injector = Injector(
+        [PluginModule, LoggingModule],
+    )
+    app_config = AppConfigSource(
+        config={
+            "app_dir": os.path.dirname(os.path.abspath(__file__)),
+            "llm.api_key": "this_is_not_a_real_key",  # pragma: allowlist secret
+            "code_generator.prompt_compression": True,
+            "code_generator.prompt_file_path": os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "data/prompts/generator_prompt.yaml",
+            ),
+            "code_generator.use_experience": True,
+        },
+    )
+    app_injector.binder.bind(AppConfigSource, to=app_config)
+
+    from taskweaver.code_interpreter.code_interpreter import CodeGenerator
+    from taskweaver.memory import Memory, Post, Round
+
+    code_generator = app_injector.create_object(CodeGenerator)
+    code_generator.set_alias("CodeInterpreter")
+
+    post1 = Post.create(
+        message="create a dataframe",
+        send_from="Planner",
+        send_to="CodeInterpreter",
+        attachment_list=[],
+    )
+
+    round1 = Round.create(user_query="hello", id="round-1")
+    round1.add_post(post1)
+
+    memory = Memory(session_id="session-1")
+    memory.conversation.add_round(round1)
+
+    selected_experiences = [
+        Experience(
+            exp_id="exp-1",
+            experience_text="this is a test experience",
+        ),
+        Experience(
+            exp_id="exp-2",
+            experience_text="this is another test experience",
+        ),
+    ]
+    code_generator.experiences = selected_experiences
+
+    messages = code_generator.compose_prompt(
+        rounds=memory.conversation.rounds,
+        plugins=code_generator.get_plugin_pool(),
+        planning_enrichments=[
+            "shared_memory_entry1",
+            "shared_memory_entry2",
+        ],
+    )
+
+    assert messages[0]["role"] == "system"
+    assert messages[0]["content"].startswith("## On current environment context:")
+    assert "this is a test experience" in messages[0]["content"]
+    assert "this is another test experience" in messages[0]["content"]
+    assert messages[1]["role"] == "user"
+    assert messages[1]["content"] == (
+        "==============================\n"
+        "## Conversation Start\n"
+        "\n"
+        "### Context Summary\n"
+        "The context summary of previous rounds and the variables that ProgramApe can "
+        "refer to:\n"
+        "None\n"
+        "\n"
+        "### Plugin Functions\n"
+        "The functions can be directly called without importing:\n"
+        "None\n"
+        "-----------------------------\n"
+        "### Feedback of the code in the last round (None if no feedback):\n"
+        "None\n"
+        "\n"
+        "### Request from the User in this round:\n"
+        "The user request is: hello\n"
+        "\n"
+        "Additional context:\n"
+        "shared_memory_entry1\n"
+        "shared_memory_entry2\n"
+        "\n"
+        "The task for this specific step is: create a dataframe\n"
+        "Please follow the instructions below to complete the task:\n"
+        "- ProgramApe can refer to intermediate variables in the generated code from "
+        "previous successful rounds and the context summary in the current "
+        "Conversation, \n"
+        "- ProgramApe should not refer to any information from failed rounds, rounds "
+        "that have not been executed, or previous Conversations.\n"
+        "- ProgramApe put all the result variables in the last line of the code.\n"
+        "- ProgramApe must not import the plugins and otherwise the code will be "
+        "failed to execute.\n"
+        "- ProgramApe must try to directly import required modules without installing "
+        "them, and only install the modules if the execution fails. \n"
     )

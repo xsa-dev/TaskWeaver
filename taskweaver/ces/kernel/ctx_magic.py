@@ -35,6 +35,10 @@ class TaskWeaverContextMagic(Magics):
         self.executor.update_session_var(session_var_dict)
         return fmt_response(True, "Session var updated.", self.executor.session_var)
 
+    @line_magic
+    def _taskweaver_check_session_var(self, line: str):
+        return fmt_response(True, "Session var printed.", self.executor.session_var)
+
     @cell_magic
     def _taskweaver_convert_path(self, line: str, cell: str):
         raw_path_str = cell
@@ -55,6 +59,16 @@ class TaskWeaverContextMagic(Magics):
         if "_" in local_ns:
             self.executor.ctx.set_output(local_ns["_"])
         return fmt_response(True, "", self.executor.get_post_execution_state())
+
+    @cell_magic
+    def _taskweaver_write_and_run(self, line: str, cell: str):
+        file_path = line.strip()
+        if not file_path:
+            return fmt_response(False, "File path not provided.")
+
+        with open(file_path, "w") as file:
+            file.write(cell)
+        self.shell.run_cell(cell)
 
 
 @magics_class

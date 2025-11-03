@@ -17,6 +17,8 @@ class Round:
     Args:
         id: the unique id of the round.
         post_list: a list of posts in the round.
+        user_query: the query of the user.
+        state: the state of the round.
     """
 
     id: str

@@ -1,6 +1,5 @@
 from typing import Any, Generator, List, Optional
 
-import requests
 from injector import inject
 
 from taskweaver.llm.base import CompletionService, LLMServiceConfig
@@ -37,7 +36,6 @@ class AzureMLService(CompletionService):
     def chat_completion(
         self,
         messages: List[ChatMessageType],
-        use_backup_engine: bool = False,
         stream: bool = True,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
@@ -76,6 +74,8 @@ class AzureMLService(CompletionService):
                 "parameters": params,
             },
         }
+        import requests
+
         with requests.Session() as session:
             with session.post(
                 endpoint,

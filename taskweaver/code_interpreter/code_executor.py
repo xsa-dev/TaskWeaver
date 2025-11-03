@@ -1,15 +1,17 @@
 import os
 from pathlib import Path
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 from injector import inject
 
 from taskweaver.ces.common import ExecutionResult, Manager
 from taskweaver.config.config_mgt import AppConfigSource
 from taskweaver.memory.plugin import PluginRegistry
+from taskweaver.module.tracing import Tracing, get_tracer, tracing_decorator
 from taskweaver.plugin.context import ArtifactType
+from taskweaver.session import SessionMetadata
 
-TRUNCATE_CHAR_LENGTH = 1000
+TRUNCATE_CHAR_LENGTH = 1500
 
 
 def get_artifact_uri(execution_id: str, file: str, use_local_uri: bool) -> str:
@@ -41,37 +43,44 @@ class CodeExecutor:
     @inject
     def __init__(
         self,
-        session_id: str,
-        workspace: str,
-        execution_cwd: str,
+        session_metadata: SessionMetadata,
         config: AppConfigSource,
         exec_mgr: Manager,
         plugin_registry: PluginRegistry,
+        tracing: Tracing,
     ) -> None:
-        self.session_id = session_id
-        self.workspace = workspace
-        self.execution_cwd = execution_cwd
+        self.session_id = session_metadata.session_id
+        self.workspace = session_metadata.workspace
+        self.execution_cwd = session_metadata.execution_cwd
         self.exec_mgr = exec_mgr
-        self.exec_client = exec_mgr.get_session_client(
-            session_id,
-            session_dir=workspace,
-            cwd=execution_cwd,
+        self.exec_client = self.exec_mgr.get_session_client(
+            self.session_id,
+            session_dir=self.workspace,
+            cwd=self.execution_cwd,
         )
         self.client_started: bool = False
         self.plugin_registry = plugin_registry
         self.plugin_loaded: bool = False
         self.config = config
+        self.tracing = tracing
+        self.session_variables = {}
 
+    @tracing_decorator
     def execute_code(self, exec_id: str, code: str) -> ExecutionResult:
-        if not self.client_started:
+        with get_tracer().start_as_current_span("start"):
             self.start()
-            self.client_started = True
 
         if not self.plugin_loaded:
-            self.load_plugin()
-            self.plugin_loaded = True
+            with get_tracer().start_as_current_span("load_plugin"):
+                self.load_plugin()
+                self.plugin_loaded = True
 
-        result = self.exec_client.execute_code(exec_id, code)
+        # update session variables
+        self.exec_client.update_session_var(self.session_variables)
+
+        with get_tracer().start_as_current_span("run_code"):
+            self.tracing.set_span_attribute("code", code)
+            result = self.exec_client.execute_code(exec_id, code)
 
         if result.is_success:
             for artifact in result.artifact:
@@ -92,7 +101,17 @@ class CodeExecutor:
                     )
                     artifact.file_name = file_name
 
+        if not result.is_success:
+            self.tracing.set_span_status("ERROR", "Code execution failed.")
+        self.tracing.set_span_attribute(
+            "result",
+            self.format_code_output(result, with_code=False, code_mask=None),
+        )
+
         return result
+
+    def update_session_var(self, session_var_dict: dict) -> None:
+        self.session_variables.update(session_var_dict)
 
     def _save_file(
         self,
@@ -125,7 +144,9 @@ class CodeExecutor:
                 print(f"Plugin {p.name} failed to load: {str(e)}")
 
     def start(self):
-        self.exec_client.start()
+        if not self.client_started:
+            self.exec_client.start()
+            self.client_started = True
 
     def stop(self):
         self.exec_client.stop()
@@ -135,14 +156,19 @@ class CodeExecutor:
         result: ExecutionResult,
         indent: int = 0,
         with_code: bool = True,
+        code_mask: Optional[str] = None,
         use_local_uri: bool = False,
     ) -> str:
         lines: List[str] = []
 
         # code execution result
         if with_code:
+            if code_mask is not None and len(code_mask) > 0:
+                display_code = result.code.replace(code_mask, "")
+            else:
+                display_code = result.code
             lines.append(
-                f"The following python code has been executed:\n" "```python\n" f"{result.code}\n" "```\n\n",
+                f"The following python code has been executed:\n" "```python\n" f"{display_code}\n" "```\n\n",
             )
 
         lines.append(

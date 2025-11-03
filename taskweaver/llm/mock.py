@@ -1,12 +1,9 @@
-import hashlib
 import json
 import os
-import random
 import time
 from dataclasses import dataclass
 from typing import Any, Dict, Generator, List, Literal, Optional
 
-import yaml
 from injector import inject
 
 from taskweaver.llm.util import ChatMessageRoleType, ChatMessageType, format_chat_message
@@ -175,10 +172,14 @@ class MockCacheStore:
         return [float(x) for x in response.split(",")]
 
     def _query_to_key(self, query: str) -> str:
+        import hashlib
+
         return hashlib.md5(query.encode("utf-8")).hexdigest()
 
     def _init_from_disk(self):
         try:
+            import yaml
+
             cache = yaml.safe_load(open(self.path, "r"))
         except Exception as e:
             raise LLMMockCacheException(f"Error loading cache file {self.path}: {e}")
@@ -206,6 +207,8 @@ class MockCacheStore:
     def _save_to_disk(self):
         # TODO: postpone immediate update and periodically save to disk
         try:
+            import yaml
+
             yaml.safe_dump(
                 {
                     "completion_store": {k: v.__dict__ for k, v in self.completion_store.items()},
@@ -240,7 +243,6 @@ class MockApiService(CompletionService, EmbeddingService):
     def chat_completion(
         self,
         messages: List[ChatMessageType],
-        use_backup_engine: bool = False,
         stream: bool = True,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
@@ -268,7 +270,6 @@ class MockApiService(CompletionService, EmbeddingService):
             new_value = format_chat_message("assistant", "")
             for chunk in self.base_completion_service.chat_completion(
                 messages,
-                use_backup_engine,
                 stream,
                 temperature,
                 max_tokens,
@@ -337,6 +338,8 @@ class MockApiService(CompletionService, EmbeddingService):
         if self.config.playback_delay < 0:
             yield cached_value
             return
+
+        import random
 
         role: ChatMessageRoleType = cached_value["role"]  # type: ignore
         content = cached_value["content"]

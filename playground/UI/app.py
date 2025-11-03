@@ -1,3 +1,4 @@
+import atexit
 import functools
 import os
 import re
@@ -31,6 +32,7 @@ from taskweaver.session.session import Session
 
 project_path = os.path.join(repo_path, "project")
 app = TaskWeaverApp(app_dir=project_path, use_local_uri=True)
+atexit.register(app.stop)
 app_session_dict: Dict[str, Session] = {}
 
 
@@ -72,10 +74,17 @@ def file_display(files: List[Tuple[str, str]], session_cwd_path: str):
             image = cl.Image(
                 name=file_path,
                 display="inline",
-                path=file_path,
+                path=file_path if os.path.isabs(file_path) else os.path.join(session_cwd_path, file_path),
                 size="large",
             )
             elements.append(image)
+        elif file_path.endswith((".mp3", ".wav", ".flac")):
+            audio = cl.Audio(
+                name="converted_speech",
+                display="inline",
+                path=file_path if os.path.isabs(file_path) else os.path.join(session_cwd_path, file_path),
+            )
+            elements.append(audio)
         else:
             if file_path.endswith(".csv"):
                 import pandas as pd
@@ -121,6 +130,7 @@ class ChainLitMessageUpdater(SessionEventHandlerBase):
     def __init__(self, root_step: cl.Step):
         self.root_step = root_step
         self.reset_cur_step()
+        self.suppress_blinking_cursor()
 
     def reset_cur_step(self):
         self.cur_step: Optional[cl.Step] = None
@@ -130,6 +140,11 @@ class ChainLitMessageUpdater(SessionEventHandlerBase):
         self.cur_message: str = ""
         self.cur_message_is_end: bool = False
         self.cur_message_sent: bool = False
+
+    def suppress_blinking_cursor(self):
+        cl.run_sync(self.root_step.stream_token(""))
+        if self.cur_step is not None:
+            cl.run_sync(self.cur_step.stream_token(""))
 
     def handle_round(
         self,
@@ -200,6 +215,7 @@ class ChainLitMessageUpdater(SessionEventHandlerBase):
                     ),
                 ]
                 cl.run_sync(self.cur_step.update())
+        self.suppress_blinking_cursor()
 
     def get_message_from_user(self, prompt: str, timeout: int = 120) -> Optional[str]:
         ask_user_msg = cl.AskUserMessage(content=prompt, author=" ", timeout=timeout)
@@ -245,7 +261,7 @@ class ChainLitMessageUpdater(SessionEventHandlerBase):
                 continue
 
             # skip Python in final result
-            if is_end and a_type in [AttachmentType.python]:
+            if is_end and a_type in [AttachmentType.reply_content]:
                 continue
 
             content_chunks.append(self.format_attachment(attachment))
@@ -309,7 +325,7 @@ class ChainLitMessageUpdater(SessionEventHandlerBase):
                     elem("code")(txt(msg)),
                 ),
             )
-        elif a_type in [AttachmentType.python, AttachmentType.sample]:
+        elif a_type in [AttachmentType.reply_content]:
             atta_cnt.append(
                 elem("pre", "tw-python", {"data-lang": "python"})(
                     elem("code", "language-python")(txt(msg, br=False)),
@@ -365,6 +381,16 @@ class ChainLitMessageUpdater(SessionEventHandlerBase):
 async def start():
     user_session_id = cl.user_session.get("id")
     app_session_dict[user_session_id] = app.get_session()
+    print("Starting new session")
+
+
+@cl.on_chat_end
+async def end():
+    user_session_id = cl.user_session.get("id")
+    app_session = app_session_dict[user_session_id]
+    print(f"Stopping session {app_session.session_id}")
+    app_session.stop()
+    app_session_dict.pop(user_session_id)
 
 
 @cl.on_message
@@ -374,7 +400,6 @@ async def main(message: cl.Message):
     session_cwd_path = session.execution_cwd
 
     # display loader before sending message
-
     async with cl.Step(name="", show_input=True, root=True) as root_step:
         response_round = await cl.make_async(session.send_message)(
             message.content,
@@ -384,7 +409,7 @@ async def main(message: cl.Message):
                     "path": element.path,
                 }
                 for element in message.elements
-                if element.type == "file"
+                if element.type == "file" or element.type == "image"
             ],
             event_handler=ChainLitMessageUpdater(root_step),
         )
@@ -423,7 +448,6 @@ async def main(message: cl.Message):
                 f"{img_prefix}[{file_name}]({file_path})",
                 file_name,
             )
-
         elements = file_display(files, session_cwd_path)
         await cl.Message(
             author="TaskWeaver",

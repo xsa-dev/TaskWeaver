@@ -1,9 +1,13 @@
+from __future__ import annotations
+
 import json
 from contextlib import contextmanager
-from typing import Any, Generator, List, Optional
+from typing import TYPE_CHECKING, Any, Generator, List, Optional
 
-import requests
 from injector import inject
+
+if TYPE_CHECKING:
+    from requests import Response
 
 from taskweaver.llm.base import CompletionService, EmbeddingService, LLMServiceConfig
 from taskweaver.llm.util import ChatMessageType, format_chat_message
@@ -24,11 +28,7 @@ class OllamaServiceConfig(LLMServiceConfig):
             "model",
             shared_model if shared_model is not None else "llama2",
         )
-        shared_backup_model = self.llm_module_config.backup_model
-        self.backup_model = self._get_str(
-            "backup_model",
-            shared_backup_model if shared_backup_model is not None else self.model,
-        )
+
         shared_embedding_model = self.llm_module_config.embedding_model
         self.embedding_model = self._get_str(
             "embedding_model",
@@ -53,7 +53,6 @@ class OllamaService(CompletionService, EmbeddingService):
     def chat_completion(
         self,
         messages: List[ChatMessageType],
-        use_backup_engine: bool = False,
         stream: bool = True,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
@@ -64,7 +63,6 @@ class OllamaService(CompletionService, EmbeddingService):
         try:
             return self._chat_completion(
                 messages=messages,
-                use_backup_engine=use_backup_engine,
                 stream=stream,
                 temperature=temperature,
                 max_tokens=max_tokens,
@@ -75,7 +73,6 @@ class OllamaService(CompletionService, EmbeddingService):
         except Exception:
             return self._completion(
                 messages=messages,
-                use_backup_engine=use_backup_engine,
                 stream=stream,
                 temperature=temperature,
                 max_tokens=max_tokens,
@@ -87,7 +84,6 @@ class OllamaService(CompletionService, EmbeddingService):
     def _chat_completion(
         self,
         messages: List[ChatMessageType],
-        use_backup_engine: bool = False,
         stream: bool = True,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
@@ -97,7 +93,7 @@ class OllamaService(CompletionService, EmbeddingService):
     ) -> Generator[ChatMessageType, None, None]:
         api_endpoint = "/api/chat"
         payload = {
-            "model": self.config.model if not use_backup_engine else self.config.backup_model,
+            "model": self.config.model,
             "messages": messages,
             "stream": stream,
         }
@@ -131,7 +127,6 @@ class OllamaService(CompletionService, EmbeddingService):
     def _completion(
         self,
         messages: List[ChatMessageType],
-        use_backup_engine: bool = False,
         stream: bool = True,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
@@ -141,7 +136,7 @@ class OllamaService(CompletionService, EmbeddingService):
     ) -> Generator[ChatMessageType, None, None]:
         api_endpoint = "/api/generate"
         payload = {
-            "model": self.config.model if not use_backup_engine else self.config.backup_model,
+            "model": self.config.model,
             "prompt": "",
             "stream": stream,
         }
@@ -182,7 +177,7 @@ class OllamaService(CompletionService, EmbeddingService):
     def get_embeddings(self, strings: List[str]) -> List[List[float]]:
         return [self._get_embedding(string) for string in strings]
 
-    def _stream_process(self, resp: requests.Response) -> Generator[Any, None, None]:
+    def _stream_process(self, resp: Response) -> Generator[Any, None, None]:
         for line in resp.iter_lines():
             line_str = line.decode("utf-8")
             if line_str and line_str.strip() != "":
@@ -200,6 +195,8 @@ class OllamaService(CompletionService, EmbeddingService):
 
     @contextmanager
     def _request_api(self, api_path: str, payload: Any, stream: bool = False):
+        import requests
+
         url = f"{self.config.api_base}{api_path}"
         with requests.Session() as session:
             with session.post(url, json=payload, stream=stream) as resp:

@@ -26,9 +26,32 @@ version_str = get_package_version()
 revert_version_file = update_version_file(version_str)
 
 # Configurations
-with open("README.md", "r") as fh:
+with open("README.md", "r", encoding="utf-8", errors="ignore") as fh:
     long_description = fh.read()
 
+
+# create zip file for ext
+def create_zip_file():
+    import zipfile
+    from pathlib import Path
+
+    root_dir = Path(__file__).parent
+    ext_zip_file = root_dir / "taskweaver" / "cli" / "taskweaver-project.zip"
+    if os.path.exists(ext_zip_file):
+        os.remove(ext_zip_file)
+
+    content_root = root_dir / "project"
+    zipf = zipfile.ZipFile(ext_zip_file, "w", zipfile.ZIP_DEFLATED)
+    for root, dirs, files in os.walk(content_root):
+        for file in files:
+            zipf.write(
+                os.path.join(root, file),
+                os.path.relpath(Path(root) / file, root_dir),
+            )
+    zipf.close()
+
+
+create_zip_file()
 
 cur_dir = os.path.dirname(
     os.path.abspath(
@@ -76,8 +99,8 @@ try:
             "Operating System :: OS Independent",
         ],
         package_data={
-            "taskweaver.planner": ["*"],  # prompt
-            "taskweaver.code_interpreter.code_generator": ["*"],  # prompt
+            "taskweaver": ["**/*.yaml", "**/*.yml"],
+            "taskweaver.cli": ["taskweaver-project.zip"],
         },
         entry_points={
             "console_scripts": ["taskweaver=taskweaver.__main__:main"],

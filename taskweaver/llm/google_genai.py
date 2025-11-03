@@ -20,11 +20,7 @@ class GoogleGenAIServiceConfig(LLMServiceConfig):
             "model",
             shared_model if shared_model is not None else "gemini-pro",
         )
-        shared_backup_model = self.llm_module_config.backup_model
-        self.backup_model = self._get_str(
-            "backup_model",
-            shared_backup_model if shared_backup_model is not None else self.model,
-        )
+
         shared_embedding_model = self.llm_module_config.embedding_model
         self.embedding_model = self._get_str(
             "embedding_model",
@@ -38,7 +34,7 @@ class GoogleGenAIServiceConfig(LLMServiceConfig):
             default=shared_response_format if shared_response_format is not None else "text",
         )
         self.temperature = self._get_float("temperature", 0.9)
-        self.max_output_tokens = self._get_int("max_output_tokens", 1000)
+        self.max_output_tokens = self._get_int("max_output_tokens", 2048)
         self.top_k = self._get_int("top_k", 1)
         self.top_p = self._get_float("top_p", 0)
 
@@ -92,7 +88,6 @@ class GoogleGenAIService(CompletionService, EmbeddingService):
     def chat_completion(
         self,
         messages: List[ChatMessageType],
-        use_backup_engine: bool = False,
         stream: bool = True,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
@@ -102,7 +97,6 @@ class GoogleGenAIService(CompletionService, EmbeddingService):
     ) -> Generator[ChatMessageType, None, None]:
         return self._chat_completion(
             messages=messages,
-            use_backup_engine=use_backup_engine,
             stream=stream,
             temperature=temperature,
             max_tokens=max_tokens,
@@ -114,7 +108,6 @@ class GoogleGenAIService(CompletionService, EmbeddingService):
     def _chat_completion(
         self,
         messages: List[ChatMessageType],
-        use_backup_engine: bool = False,
         stream: bool = True,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,

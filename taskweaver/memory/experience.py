@@ -1,15 +1,14 @@
 import json
 import os
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
-import numpy as np
 from injector import inject
-from sklearn.metrics.pairwise import cosine_similarity
 
 from taskweaver.config.module_config import ModuleConfig
 from taskweaver.llm import LLMApi, format_chat_message
 from taskweaver.logging import TelemetryLogger
+from taskweaver.module.tracing import Tracing, tracing_decorator
 from taskweaver.utils import read_yaml, write_yaml
 
 
@@ -45,10 +44,6 @@ class ExperienceConfig(ModuleConfig):
     def _configure(self) -> None:
         self._set_name("experience")
 
-        self.experience_dir = self._get_path(
-            "experience_dir",
-            os.path.join(self.src.app_base_path, "experience"),
-        )
         self.default_exp_prompt_path = self._get_path(
             "default_exp_prompt_path",
             os.path.join(
@@ -58,6 +53,8 @@ class ExperienceConfig(ModuleConfig):
         )
         self.retrieve_threshold = self._get_float("retrieve_threshold", 0.2)
 
+        self.llm_alias = self._get_str("llm_alias", default="", required=False)
+
 
 class ExperienceGenerator:
     @inject
@@ -66,24 +63,29 @@ class ExperienceGenerator:
         llm_api: LLMApi,
         config: ExperienceConfig,
         logger: TelemetryLogger,
+        tracing: Tracing,
     ):
         self.config = config
         self.llm_api = llm_api
         self.logger = logger
+        self.tracing = tracing
 
         self.default_prompt_template = read_yaml(self.config.default_exp_prompt_path)["content"]
 
         self.experience_list: List[Experience] = []
 
-        self.exception_message_for_refresh = (
-            "Please cd to the `script` directory and "
-            "run `python -m experience_mgt --refresh` to refresh the experience."
-        )
+        self.experience_dir = None
+        self.sub_path = None
+
+    def set_experience_dir(self, experience_dir: str):
+        self.experience_dir = experience_dir
+
+    def set_sub_path(self, sub_path: str):
+        self.sub_path = sub_path
 
     @staticmethod
     def _preprocess_conversation_data(
         conv_data: dict,
-        target_role: Literal["Planner", "CodeInterpreter", "All"],
     ):
         def remove_id_fields(d):
             if isinstance(d, dict):
@@ -101,35 +103,56 @@ class ExperienceGenerator:
 
         return conv_data
 
+    @tracing_decorator
     def summarize_experience(
         self,
         exp_id: str,
         prompt: Optional[str] = None,
-        target_role: Literal["Planner", "CodeInterpreter", "All"] = "All",
     ):
-        raw_exp_file_path = os.path.join(self.config.experience_dir, f"raw_exp_{exp_id}.yaml")
+        exp_dir = self.get_experience_dir()
+
+        raw_exp_file_path = os.path.join(exp_dir, f"raw_exp_{exp_id}.yaml")
         conversation = read_yaml(raw_exp_file_path)
 
-        conversation = self._preprocess_conversation_data(conversation, target_role)
+        conversation = self._preprocess_conversation_data(conversation)
 
         system_instruction = prompt if prompt else self.default_prompt_template
         prompt = [
             format_chat_message("system", system_instruction),
             format_chat_message("user", json.dumps(conversation)),
         ]
-        summarized_experience = self.llm_api.chat_completion(prompt)["content"]
+        self.tracing.set_span_attribute("prompt", json.dumps(prompt, indent=2))
+        prompt_size = self.tracing.count_tokens(json.dumps(prompt))
+        self.tracing.set_span_attribute("prompt_size", prompt_size)
+        self.tracing.add_prompt_size(
+            size=prompt_size,
+            labels={
+                "direction": "input",
+            },
+        )
+        summarized_experience = self.llm_api.chat_completion(prompt, llm_alias=self.config.llm_alias)["content"]
+        output_size = self.tracing.count_tokens(summarized_experience)
+        self.tracing.set_span_attribute("output_size", output_size)
+        self.tracing.add_prompt_size(
+            size=output_size,
+            labels={
+                "direction": "output",
+            },
+        )
 
         return summarized_experience
 
+    @tracing_decorator
     def refresh(
         self,
-        target_role: Literal["Planner", "CodeInterpreter", "All"],
         prompt: Optional[str] = None,
     ):
-        if not os.path.exists(self.config.experience_dir):
-            raise ValueError(f"Experience directory {self.config.experience_dir} does not exist.")
+        exp_dir = self.get_experience_dir()
 
-        exp_files = os.listdir(self.config.experience_dir)
+        if not os.path.exists(exp_dir):
+            raise ValueError(f"Experience directory {exp_dir} does not exist.")
+
+        exp_files = os.listdir(exp_dir)
 
         raw_exp_ids = [
             os.path.splitext(os.path.basename(exp_file))[0].split("_")[2]
@@ -156,11 +179,11 @@ class ExperienceGenerator:
         to_be_embedded = []
         for idx, exp_id in enumerate(exp_ids):
             rebuild_flag = False
-            exp_file_name = f"{target_role}_exp_{exp_id}.yaml"
-            if exp_file_name not in os.listdir(self.config.experience_dir):
+            exp_file_name = f"exp_{exp_id}.yaml"
+            if exp_file_name not in os.listdir(exp_dir):
                 rebuild_flag = True
             else:
-                exp_file_path = os.path.join(self.config.experience_dir, exp_file_name)
+                exp_file_path = os.path.join(exp_dir, exp_file_name)
                 experience = read_yaml(exp_file_path)
                 if (
                     experience["embedding_model"] != self.llm_api.embedding_service.config.embedding_model
@@ -170,18 +193,18 @@ class ExperienceGenerator:
 
             if rebuild_flag:
                 if exp_id in raw_exp_ids:
-                    summarized_experience = self.summarize_experience(exp_id, prompt, target_role)
+                    summarized_experience = self.summarize_experience(exp_id, prompt)
                     experience_obj = Experience(
                         experience_text=summarized_experience,
                         exp_id=exp_id,
                         raw_experience_path=os.path.join(
-                            self.config.experience_dir,
+                            exp_dir,
                             f"raw_exp_{exp_id}.yaml",
                         ),
                     )
                 elif exp_id in handcrafted_exp_ids:
                     handcrafted_exp_file_path = os.path.join(
-                        self.config.experience_dir,
+                        exp_dir,
                         f"handcrafted_exp_{exp_id}.yaml",
                     )
                     experience_obj = Experience.from_dict(read_yaml(handcrafted_exp_file_path))
@@ -199,51 +222,53 @@ class ExperienceGenerator:
             for i, exp in enumerate(to_be_embedded):
                 exp.embedding = exp_embeddings[i]
                 exp.embedding_model = self.llm_api.embedding_service.config.embedding_model
-                experience_file_path = os.path.join(self.config.experience_dir, f"{target_role}_exp_{exp.exp_id}.yaml")
+                experience_file_path = os.path.join(exp_dir, f"exp_{exp.exp_id}.yaml")
                 write_yaml(experience_file_path, exp.to_dict())
 
             self.logger.info("Experience obj saved.")
 
-    def load_experience(
-        self,
-        target_role: Literal["Planner", "CodeInterpreter", "All"],
-    ):
-        if not os.path.exists(self.config.experience_dir):
-            raise ValueError(f"Experience directory {self.config.experience_dir} does not exist.")
+    @tracing_decorator
+    def load_experience(self):
+        exp_dir = self.get_experience_dir()
+
+        if not os.path.exists(exp_dir):
+            raise ValueError(f"Experience directory {exp_dir} does not exist.")
 
         original_exp_files = [
             exp_file
-            for exp_file in os.listdir(self.config.experience_dir)
+            for exp_file in os.listdir(exp_dir)
             if exp_file.startswith("raw_exp_") or exp_file.startswith("handcrafted_exp_")
         ]
         exp_ids = [os.path.splitext(os.path.basename(exp_file))[0].split("_")[2] for exp_file in original_exp_files]
         if len(exp_ids) == 0:
             self.logger.warning(
-                f"No experience found for {target_role}."
-                f"Please type /save in the chat window to save raw experience or write handcrafted experience."
-                + self.exception_message_for_refresh,
+                "No experience found.",
             )
             return
 
         for exp_id in exp_ids:
-            exp_file = f"{target_role}_exp_{exp_id}.yaml"
-            exp_file_path = os.path.join(self.config.experience_dir, exp_file)
-            assert os.path.exists(exp_file_path), (
-                f"Experience {exp_file} for {target_role} not found. " + self.exception_message_for_refresh
-            )
+            exp_id_exists = exp_id in [exp.exp_id for exp in self.experience_list]
+            if exp_id_exists:
+                continue
+
+            exp_file = f"exp_{exp_id}.yaml"
+            exp_file_path = os.path.join(exp_dir, exp_file)
+            assert os.path.exists(exp_file_path), f"Experience {exp_file} not found. "
 
             experience = read_yaml(exp_file_path)
 
-            assert len(experience["embedding"]) > 0, (
-                f"Experience {exp_file} has no embedding." + self.exception_message_for_refresh
-            )
-            assert experience["embedding_model"] == self.llm_api.embedding_service.config.embedding_model, (
-                f"Experience {exp_file} has different embedding model. " + self.exception_message_for_refresh
-            )
+            assert len(experience["embedding"]) > 0, f"Experience {exp_file} has no embedding."
+            assert (
+                experience["embedding_model"] == self.llm_api.embedding_service.config.embedding_model
+            ), f"Experience {exp_file} has different embedding model."
 
             self.experience_list.append(Experience(**experience))
 
+    @tracing_decorator
     def retrieve_experience(self, user_query: str) -> List[Tuple[Experience, float]]:
+        import numpy as np
+        from sklearn.metrics.pairwise import cosine_similarity
+
         user_query_embedding = np.array(self.llm_api.get_embedding(user_query))
 
         similarities = []
@@ -270,14 +295,20 @@ class ExperienceGenerator:
         return selected_experiences
 
     def _delete_exp_file(self, exp_file_name: str):
-        if exp_file_name in os.listdir(self.config.experience_dir):
-            os.remove(os.path.join(self.config.experience_dir, exp_file_name))
+        exp_dir = self.get_experience_dir()
+
+        if exp_file_name in os.listdir(exp_dir):
+            os.remove(os.path.join(exp_dir, exp_file_name))
             self.logger.info(f"Experience {exp_file_name} deleted.")
         else:
             self.logger.info(f"Experience {exp_file_name} not found.")
 
-    def delete_experience(self, exp_id: str, target_role: Literal["Planner", "CodeInterpreter"]):
-        exp_file_name = f"{target_role}_exp_{exp_id}.yaml"
+    def get_experience_dir(self):
+        assert self.experience_dir is not None, "Experience directory is not set. Call set_experience_dir() first."
+        return os.path.join(self.experience_dir, self.sub_path) if self.sub_path else self.experience_dir
+
+    def delete_experience(self, exp_id: str):
+        exp_file_name = f"exp_{exp_id}.yaml"
         self._delete_exp_file(exp_file_name)
 
     def delete_raw_experience(self, exp_id: str):
@@ -291,13 +322,13 @@ class ExperienceGenerator:
     @staticmethod
     def format_experience_in_prompt(
         prompt_template: str,
-        selected_experiences: Optional[List[Experience]] = None,
+        selected_experiences: Optional[List[Experience,]] = None,
     ):
         if selected_experiences is not None and len(selected_experiences) > 0:
             return prompt_template.format(
                 experiences="===================\n"
                 + "\n===================\n".join(
-                    [exp.experience_text for exp, sim in selected_experiences],
+                    [exp.experience_text for exp in selected_experiences],
                 ),
             )
         else:

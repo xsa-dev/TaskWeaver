@@ -16,7 +16,7 @@ def require_workspace():
             else:
                 click.echo(
                     "The current directory is not a valid Task Weaver project directory. "
-                    "There needs to be a `taskweaver-config.json` in the root of the project directory. "
+                    "There needs to be a `taskweaver_config.json` in the root of the project directory. "
                     "Please change the working directory to a valid project directory or initialize a new one. "
                     "Refer to --help for more information.",
                 )
@@ -35,8 +35,17 @@ class CliContext:
     is_workspace_empty: bool
 
 
-def get_ascii_banner() -> str:
-    return dedent(
+def center_cli_str(text: str, width: Optional[int] = None):
+    import shutil
+
+    width = width or shutil.get_terminal_size().columns
+    lines = text.split("\n")
+    max_line_len = max(len(line) for line in lines)
+    return "\n".join((line + " " * (max_line_len - len(line))).center(width) for line in lines)
+
+
+def get_ascii_banner(center: bool = True) -> str:
+    text = dedent(
         r"""
         =========================================================
          _____         _     _       __
@@ -47,3 +56,7 @@ def get_ascii_banner() -> str:
         =========================================================
         """,
     ).strip()
+    if center:
+        return center_cli_str(text)
+    else:
+        return text

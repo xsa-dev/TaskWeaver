@@ -60,7 +60,7 @@ class RuntimePlugin(EnvPlugin):
 
             module_name = self.module_name
             with tempfile.TemporaryDirectory() as temp_dir:
-                module_path = os.path.join(temp_dir, f"{self.name}.py")
+                module_path = os.path.join(str(temp_dir), f"{self.name}.py")
                 with open(module_path, "w") as f:
                     f.write(self.impl)
 
@@ -173,8 +173,9 @@ class Executor:
             # customize pandas display options
             pd.set_option("display.html.table_schema", False)
             pd.set_option("display.notebook_repr_html", False)
-            pd.set_option("display.max_rows", 4)
+            pd.set_option("display.max_rows", 5)
             pd.set_option("display.expand_frame_repr", False)
+            pd.set_option("display.max_colwidth", None)
             local_ns["pd"] = pd
         except ImportError:
             self.log(

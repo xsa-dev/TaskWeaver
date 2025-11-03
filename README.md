@@ -23,20 +23,35 @@ Unlike many agent frameworks that only track the chat history with LLMs in text,
 
 
 ## 🆕 News
-- 📅2024-02-01: TaskWeaver now has a plugin [document_retriever](https://github.com/microsoft/TaskWeaver/blob/main/project/plugins/README.md#document_retriever) for RAG based on a knowledge base.📚
-- 📅2024-01-30: TaskWeaver introduces a new plugin-only mode that securely generates calls to specified plugins without producing extraneous code.🪡 
-- 📅2024-01-23: TaskWeaver can now be personalized by transforming your chat histories into enduring [experiences](https://microsoft.github.io/TaskWeaver/docs/experience) 🎉
-- 📅2024-01-17: TaskWeaver now has a plugin [vision_web_explorer](https://github.com/microsoft/TaskWeaver/blob/main/project/plugins/README.md#vision_web_explorer) that can open a web browser and explore websites.🌐
-- 📅2024-01-15: TaskWeaver now supports Streaming♒ in both UI and command line.✌️
+- 📅2025-03-13: TaskWeaver now supports vision input for the Planner role. Please check the [vision input](https://microsoft.github.io/TaskWeaver/blog/vision) for more details.👀
+- 📅2025-01-16: TaskWeaver has been enhanced with an experimental role called [Recepta](https://microsoft.github.io/TaskWeaver/blog/reasoning) for its reasoning power.🧠
+- 📅2024-12-23: TaskWeaver has been integrated with the [AgentOps](https://microsoft.github.io/TaskWeaver/docs/observability) for better observability and monitoring.🔍
+- 📅2024-09-13: We introduce the shared memory to store information that is shared between the roles in TaskWeaver. Please check the [memory](https://microsoft.github.io/TaskWeaver/docs/memory) for more details.🧠
+- 📅2024-09-13: We have enhanced the experience feature by allowing static and dynamic experience selection. Please check the [experience](https://microsoft.github.io/TaskWeaver/blog/experience) for more details.📚 
+- 📅2024-07-02: We have optimized TaskWeaver to support not-that-large language models served locally. Please check this [post](https://microsoft.github.io/TaskWeaver/blog/local_llm) for more details.🔗
+- 📅2024-05-07: We have added two blog posts on [Evaluating a LLM agent](https://microsoft.github.io/TaskWeaver/blog/evaluation) and [Adding new roles to TaskWeaver](https://microsoft.github.io/TaskWeaver/blog/role) in the documentation.📝
+- 📅2024-03-28: TaskWeaver now offers all-in-one Docker image, providing a convenient one-stop experience for users. Please check the [docker](https://microsoft.github.io/TaskWeaver/docs/usage/docker) for more details.🐳
+- 📅2024-03-27: TaskWeaver now switches to `container` mode by default for code execution. Please check the [code execution](https://microsoft.github.io/TaskWeaver/docs/code_execution) for more details.🐳
+<!-- - 📅2024-03-07: TaskWeaver now supports configuration of different LLMs for various components, such as the Planner and CodeInterpreter. Please check the [multi-llm](https://microsoft.github.io/TaskWeaver/docs/llms/multi-llm) for more details.🔗 -->
+<!-- - 📅2024-03-04: TaskWeaver now supports a [container](https://microsoft.github.io/TaskWeaver/docs/code_execution) mode, which provides a more secure environment for code execution.🐳 -->
+<!-- - 📅2024-02-28: TaskWeaver now offers a [CLI-only](https://microsoft.github.io/TaskWeaver/docs/advanced/cli_only) mode, enabling users to interact seamlessly with the Command Line Interface (CLI) using natural language.📟 -->
+<!-- - 📅2024-02-01: TaskWeaver now has a plugin [document_retriever](https://github.com/microsoft/TaskWeaver/blob/main/project/plugins/README.md#document_retriever) for RAG based on a knowledge base.📚 -->
+<!-- - 📅2024-01-30: TaskWeaver introduces a new plugin-only mode that securely generates calls to specified plugins without producing extraneous code.🪡 --> 
+<!-- - 📅2024-01-23: TaskWeaver can now be personalized by transforming your chat histories into enduring [experiences](https://microsoft.github.io/TaskWeaver/docs/customization/experience) 🎉 -->
+<!-- - 📅2024-01-17: TaskWeaver now has a plugin [vision_web_explorer](https://github.com/microsoft/TaskWeaver/blob/main/project/plugins/README.md#vision_web_explorer) that can open a web browser and explore websites.🌐 -->
+<!-- - 📅2024-01-15: TaskWeaver now supports Streaming♒ in both UI and command line.✌️ -->
 <!-- - 📅2024-01-01: Welcome join TaskWeaver [Discord](https://discord.gg/Z56MXmZgMb). -->
 <!-- - 📅2023-12-21: TaskWeaver now supports a number of LLMs, such as LiteLLM, Ollama, Gemini, and QWen🎈.) -->
 <!-- - 📅2023-12-21: TaskWeaver Website is now [available]&#40;https://microsoft.github.io/TaskWeaver/&#41; with more documentations.) -->
 <!-- - 📅2023-12-12: A simple UI demo is available in playground/UI folder, try it [here](https://microsoft.github.io/TaskWeaver/docs/usage/webui)! -->
-<!-- - 📅2023-11-30: TaskWeaver is released on GitHub🎈.  -->
+- ......
+- 📅2023-11-30: TaskWeaver is released on GitHub🎈.  
 
 
 ## 💥 Highlights
 
+- [x] **Planning for complex tasks** - TaskWeaver, which features task decomposition and progress tracking, is designed to solve complex tasks.
+- [x] **Reflective execution** - TaskWeaver supports reflective execution, which allows the agent to reflect on the execution process and make adjustments.
 - [x] **Rich data structure** - TaskWeaver allows you to work with rich data structures in Python, such as DataFrames, instead of dealing with strings.
 - [x] **Customized algorithms** - TaskWeaver allows you to encapsulate your own algorithms into plugins and orchestrate them.
 - [x] **Incorporating domain-specific knowledge** - TaskWeaver is designed to incorporate domain-specific knowledge easily to improve the reliability.
@@ -45,7 +60,18 @@ Unlike many agent frameworks that only track the chat history with LLMs in text,
 - [x] **Easy to use** - TaskWeaver is easy to use with sample plugins, examples and tutorials to help you get started. TaskWeaver offers an open-box experience, allowing users to run it immediately after installation.
 - [x] **Easy to debug** - TaskWeaver is easy to debug with detailed and transparent logs to help you understand the entire process, including LLM prompts, the code generation, and execution process.
 - [x] **Security consideration** - TaskWeaver supports a basic session management to keep different users' data separate. The code execution is separated into different processes to avoid mutal interference.
-- [x] **Easy extension** - TaskWeaver is easy to extend to accomplish more complex tasks with multiple agents as the plugins.
+- [x] **Easy extension** - TaskWeaver is easy to extend to accomplish more complex tasks with multiple agents as roles and plugins.
+
+## 📚 Asking for Contributions
+
+There are still many features and improvements can be made. But due to our limited resources, we are not able to implement all of them or the progress will be slow. 
+We are looking forward to your contributions to make TaskWeaver better.
+- [ ] Easy-to-use and maintainable UX/UI
+- [ ] Support for prompt template management
+- [ ] Better plugin experiences, such as displaying updates or stopping in the middle of running the plugin and user confirmation before running the plugin
+- [ ] Async interaction with LLMs
+- [ ] Support for remote code execution
+
 
 ## ✨ Quick Start
 
@@ -63,6 +89,10 @@ cd TaskWeaver
 pip install -r requirements.txt
 ```
 
+If you want to install an earlier version of TaskWeaver, you may check the [release](https://github.com/microsoft/TaskWeaver/releases) page, find the tag (e.g., `v0.0.1`) and install it by 
+```
+pip install git+https://github.com/microsoft/TaskWeaver@<TAG>
+```
 
 ### 🖊️ Step 2: Configure the LLMs
 Before running TaskWeaver, you need to provide your LLM configurations. Taking OpenAI as an example, you can configure `taskweaver_config.json` file as follows. 
@@ -78,6 +108,10 @@ Before running TaskWeaver, you need to provide your LLM configurations. Taking O
 💡 TaskWeaver also supports other LLMs and advanced configurations, please check the [documents](https://microsoft.github.io/TaskWeaver/docs/overview) for more details. 
 
 ### 🚩 Step 3: Start TaskWeaver
+
+💡 TaskWeaver has switched to `container` mode by default for code execution, which means the code is run in a container.
+You may need to install Docker and take care of the dependencies in the container.
+Please check the [code execution](https://microsoft.github.io/TaskWeaver/docs/code_execution) for more details.
 
 #### ⌨️ Command Line (CLI)
 ```bash
@@ -105,12 +139,14 @@ TaskWeaver also supports WebUI for demo purpose, please refer to [web UI docs](h
 #### or 📋 Import as a Library
 TaskWeaver can be imported as a library to integrate with your existing project, more information can be found in [docs](https://microsoft.github.io/TaskWeaver/docs/usage/library)
 
+
+
 ## 📖 Documentation
 More documentations can be found on [TaskWeaver Website](https://microsoft.github.io/TaskWeaver).
 
 
 ### ❓Get help 
-* ❔GitHub Issues (prefered)
+* ❔GitHub Issues (**Preferred**)
 * [💬 Discord](https://discord.gg/Z56MXmZgMb) for discussion
 * For other communications, please contact taskweaver@microsoft.com
 

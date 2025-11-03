@@ -1,4 +1,3 @@
-from http import HTTPStatus
 from typing import Any, Generator, List, Optional
 
 from injector import inject
@@ -21,12 +20,6 @@ class QWenServiceConfig(LLMServiceConfig):
         self.model = self._get_str(
             "model",
             shared_model if shared_model is not None else "qwen-max-1201",
-        )
-
-        shared_backup_model = self.llm_module_config.backup_model
-        self.backup_model = self._get_str(
-            "backup_model",
-            shared_backup_model if shared_backup_model is not None else self.model,
         )
 
         shared_embedding_model = self.llm_module_config.embedding_model
@@ -57,7 +50,6 @@ class QWenService(CompletionService, EmbeddingService):
     def chat_completion(
         self,
         messages: List[ChatMessageType],
-        use_backup_engine: bool = False,
         stream: bool = True,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
@@ -77,6 +69,8 @@ class QWenService(CompletionService, EmbeddingService):
             incremental_output=True,
         )
 
+        from http import HTTPStatus
+
         for msg_chunk in response:
             if msg_chunk.status_code == HTTPStatus.OK:
                 yield msg_chunk.output.choices[0]["message"]
@@ -92,6 +86,9 @@ class QWenService(CompletionService, EmbeddingService):
             input=strings,
         )
         embeddings = []
+
+        from http import HTTPStatus
+
         if resp.status_code == HTTPStatus.OK:
             for emb in resp["output"]["embeddings"]:
                 embeddings.append(emb["embedding"])

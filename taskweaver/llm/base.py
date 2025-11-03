@@ -8,6 +8,25 @@ from taskweaver.config.module_config import ModuleConfig
 from taskweaver.llm.util import ChatMessageType
 
 
+class ExtLLMModuleConfig(ModuleConfig):
+    def _configure(self) -> None:
+        self._set_name("ext_llms")
+
+        self.ext_llm_config_dicts = self._get_dict("llm_configs", {})
+        self.ext_llm_config_mapping = {}
+
+        for key, config_dict in self.ext_llm_config_dicts.items():
+            config = self.src.clone()
+            for k, v in config_dict.items():
+                config.set_config_value(
+                    var_name=k,
+                    var_type="str",
+                    value=v,
+                    source="override",
+                )  # override the LLM config from extra llms
+            self.ext_llm_config_mapping[key] = config
+
+
 class LLMModuleConfig(ModuleConfig):
     def _configure(self) -> None:
         self._set_name("llm")
@@ -27,11 +46,7 @@ class LLMModuleConfig(ModuleConfig):
         )
 
         self.model: Optional[str] = self._get_str("model", None, required=False)
-        self.backup_model: Optional[str] = self._get_str(
-            "backup_model",
-            None,
-            required=False,
-        )
+
         self.embedding_model: Optional[str] = self._get_str(
             "embedding_model",
             None,
@@ -40,7 +55,7 @@ class LLMModuleConfig(ModuleConfig):
 
         self.response_format: Optional[str] = self._get_enum(
             "response_format",
-            options=["json_object", "text"],
+            options=["json_object", "text", "json_schema"],
             default="json_object",
         )
 
@@ -66,7 +81,6 @@ class CompletionService(abc.ABC):
     def chat_completion(
         self,
         messages: List[ChatMessageType],
-        use_backup_engine: bool = False,
         stream: bool = True,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
@@ -79,7 +93,6 @@ class CompletionService(abc.ABC):
 
         :param messages: list of messages
 
-        :param use_backup_engine: whether to use back up engine
         :param stream: whether to stream the response
 
         :param temperature: temperature

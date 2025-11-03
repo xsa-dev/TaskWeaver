@@ -47,6 +47,18 @@ class SessionManager:
         """update session in session store"""
         self.session_store.set_session(session.session_id, session)
 
+    def stop_session(self, session_id: str) -> None:
+        """stop session in session store"""
+        session = self._get_session_from_store(session_id, False)
+        if session is not None:
+            session.stop()
+            self.session_store.remove_session(session_id)
+
+    def stop_all_sessions(self) -> None:
+        session_ids = self.session_store.list_all_session_ids()
+        for session_id in session_ids:
+            self.stop_session(session_id)
+
     @overload
     def _get_session_from_store(
         self,
